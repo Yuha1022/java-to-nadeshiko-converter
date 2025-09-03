@@ -5,7 +5,6 @@ import java.util.List;
 import com.github.javaparser.ast.CompilationUnit;
 import com.github.javaparser.ast.expr.DoubleLiteralExpr;
 import com.github.javaparser.ast.expr.IntegerLiteralExpr;
-import com.github.javaparser.ast.expr.LongLiteralExpr;
 import com.github.javaparser.ast.expr.MethodCallExpr;
 import com.github.javaparser.ast.expr.StringLiteralExpr;
 import com.github.javaparser.ast.expr.UnaryExpr;
@@ -32,8 +31,6 @@ public class PrintlnConverter {
                         text = ((IntegerLiteralExpr) methodCall.getArgument(0)).getValue() + "と表示。";
                     } else if (methodCall.getArgument(0) instanceof DoubleLiteralExpr) { // 浮動小数点
                         text = ((DoubleLiteralExpr) methodCall.getArgument(0)).asDouble() + "と表示。";
-                    } else if (methodCall.getArgument(0) instanceof LongLiteralExpr) { // 整数(long)
-                        text = ((LongLiteralExpr) methodCall.getArgument(0)).getValue() + "と表示。";
                     } else if (methodCall.getArgument(0) instanceof UnaryExpr) {
                         UnaryExpr unary = (UnaryExpr) methodCall.getArgument(0);
                         if (unary.getOperator() == UnaryExpr.Operator.MINUS) { // マイナス付きの数値のとき
@@ -41,8 +38,6 @@ public class PrintlnConverter {
                                 text = "-" + ((IntegerLiteralExpr) unary.getExpression()).getValue() + "と表示。";
                             } else if (unary.getExpression() instanceof DoubleLiteralExpr) { // 浮動小数点
                                 text = "-" + ((DoubleLiteralExpr) unary.getExpression()).asDouble() + "と表示。";
-                            } else if (unary.getExpression() instanceof LongLiteralExpr) { // 整数(long)
-                                text = "-" + ((LongLiteralExpr) unary.getExpression()).getValue() + "と表示。";
                             }
                         }
                     }
