@@ -7,6 +7,13 @@
 	"version": "0.2.0",
 	"configurations": [
 		{
+			"type": "java",
+			"name": "JavaToNadeshikoConverter",
+			"request": "launch",
+			"mainClass": "JavaToNadeshikoConverter",
+			"projectName": "java-to-nadeshiko-converter_46b80d29"
+		},
+		{
 			"name": "Run Extension",
 			"type": "extensionHost",
 			"request": "launch",
@@ -16,8 +23,7 @@
 			"outFiles": [
 				"${workspaceFolder}/dist/**/*.js"
 			],
-			//"preLaunchTask": "${defaultBuildTask}"
-            "preLaunchTask": "npm: compile"
+			"preLaunchTask": "npm: compile"
 		}
 	]
 }

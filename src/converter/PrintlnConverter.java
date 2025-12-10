@@ -1,61 +1,101 @@
 package converter;
+
 import java.util.ArrayList;
 import java.util.List;
 
 import com.github.javaparser.ast.CompilationUnit;
-import com.github.javaparser.ast.expr.DoubleLiteralExpr;
-import com.github.javaparser.ast.expr.IntegerLiteralExpr;
+import com.github.javaparser.ast.expr.Expression;
+import com.github.javaparser.ast.expr.FieldAccessExpr;
 import com.github.javaparser.ast.expr.MethodCallExpr;
-import com.github.javaparser.ast.expr.StringLiteralExpr;
-import com.github.javaparser.ast.expr.UnaryExpr;
+import com.github.javaparser.ast.expr.NameExpr;
 import com.github.javaparser.ast.visitor.VoidVisitorAdapter;
 
-public class PrintlnConverter {
+public class PrintlnConverter { // System.out.println文をなでしこ形式に変換するクラス
+
     public static List<Item> convert(CompilationUnit cu) {
-        List<Item> items = new ArrayList<>();
+        List<Item> items = new ArrayList<>(); // 変換結果を格納するリスト
         cu.accept(new VoidVisitorAdapter<Void>() {
             @Override
-            public void visit(MethodCallExpr methodCall, Void arg) {
-                if (methodCall.getScope().isPresent() &&
-                    methodCall.getScope().get().toString().equals("System.out") &&
-                    methodCall.getNameAsString().equals("println") &&
-                    methodCall.getArguments().size() == 1) { // System.out.println(引数1つ)のとき
-                    
-                    int line = methodCall.getBegin().map(p -> p.line).orElse(-1); // 行番号を取得
-                    String text = null;
-                    
-                    // 引数の型ごとに変換
-                    if (methodCall.getArgument(0) instanceof StringLiteralExpr) { // 文字列
-                        text = "「" + ((StringLiteralExpr) methodCall.getArgument(0)).asString() + "」と表示。";
-                    } else if (methodCall.getArgument(0) instanceof IntegerLiteralExpr) { // 整数
-                        text = ((IntegerLiteralExpr) methodCall.getArgument(0)).getValue() + "と表示。";
-                    } else if (methodCall.getArgument(0) instanceof DoubleLiteralExpr) { // 浮動小数点
-                        text = ((DoubleLiteralExpr) methodCall.getArgument(0)).asDouble() + "と表示。";
-                    } else if (methodCall.getArgument(0) instanceof UnaryExpr) {
-                        UnaryExpr unary = (UnaryExpr) methodCall.getArgument(0);
-                        if (unary.getOperator() == UnaryExpr.Operator.MINUS) { // マイナス付きの数値のとき
-                            if (unary.getExpression() instanceof IntegerLiteralExpr) { //整数
-                                text = "-" + ((IntegerLiteralExpr) unary.getExpression()).getValue() + "と表示。";
-                            } else if (unary.getExpression() instanceof DoubleLiteralExpr) { // 浮動小数点
-                                text = "-" + ((DoubleLiteralExpr) unary.getExpression()).asDouble() + "と表示。";
-                            }
-                        }
+            public void visit(MethodCallExpr methodCall, Void arg) { // メソッド呼び出しの場合
+                if (isPrintlnCall(methodCall)) { // System.out.printlnの場合
+                    int line = methodCall.getBegin().map(p -> p.line).orElse(-1); // 行番号取得
+                    String indent = IndentManager.getIndentForLine(line); // 行のインデントを取得
+                    if (!methodCall.getArguments().isEmpty()) { // 引数が存在する場合
+                        String content = convertPrintContent(methodCall.getArguments().get(0)); // 最初の引数を取得
+                        String text = indent + content + "と表示。"; // なでしこ形式のテキスト生成
+                        items.add(new Item(line, text)); // 変換結果をリストに追加
+                    } else { // 引数がない場合
+                        String text = indent + "改行。";
+                        items.add(new Item(line, text)); // 変換結果をリストに追加
                     }
-                    
-                    if (text != null) { // リストに追加
-                        items.add(new Item(line, text));
+                } else if (isPrintCall(methodCall)) { // System.out.printの場合
+                    int line = methodCall.getBegin().map(p -> p.line).orElse(-1); // 行番号取得
+                    if (!methodCall.getArguments().isEmpty()) { // 引数が存在する場合
+                        String content = convertPrintContent(methodCall.getArguments().get(0)); // 最初の引数を取得
+                        String indent = IndentManager.getIndentForLine(line); // 行のインデントを取得
+                        String text = indent + content + "と無改行表示。"; // なでしこ形式のテキスト生成
+                        items.add(new Item(line, text)); // 変換結果をリストに追加
                     }
                 }
-                super.visit(methodCall, arg); // 子要素も探索する
+                super.visit(methodCall, arg); // 子ノードの訪問
             }
         }, null);
+
         return items;
     }
 
-    public static class Item { // 行番号と内容を保持するクラス
+    private static boolean isPrintlnCall(MethodCallExpr methodCall) { // System.out.printlnかどうか判定
+        String methodName = methodCall.getNameAsString();
+        // println または pritnln (typo) を検出
+        if (!"println".equals(methodName) && !"pritnln".equals(methodName)) {
+            return false;
+        }
+        if (methodCall.getScope().isPresent()) { // スコープ(System.out)が存在する場合
+            Expression scope = methodCall.getScope().get(); // スコープ取得
+            if (scope instanceof FieldAccessExpr) { // フィールドアクセスの場合
+                FieldAccessExpr fieldAccess = (FieldAccessExpr) scope; // フィールドアクセス取得
+                if ("out".equals(fieldAccess.getNameAsString())) { // フィールド名がoutの場合
+                    if (fieldAccess.getScope() instanceof NameExpr) { // スコープが名前式の場合
+                        NameExpr nameExpr = (NameExpr) fieldAccess.getScope(); // 名前式取得
+                        return "System".equals(nameExpr.getNameAsString()); // 名前式がSystemの場合
+                    }
+                }
+            }
+        }
+        return false;
+    }
+
+    private static boolean isPrintCall(MethodCallExpr methodCall) { // System.out.printかどうか判定
+        if (!"print".equals(methodCall.getNameAsString())) { // メソッド名がprintでない場合
+            return false;
+        }
+        if (methodCall.getScope().isPresent()) { // スコープ(System.out)が存在する場合
+            Expression scope = methodCall.getScope().get(); // スコープ取得
+            if (scope instanceof FieldAccessExpr) { // フィールドアクセスの場合
+                FieldAccessExpr fieldAccess = (FieldAccessExpr) scope; // フィールドアクセス取得
+                if ("out".equals(fieldAccess.getNameAsString())) { // フィールド名がoutの場合
+                    if (fieldAccess.getScope() instanceof NameExpr) { // スコープが名前式の場合
+                        NameExpr nameExpr = (NameExpr) fieldAccess.getScope(); // 名前式取得
+                        return "System".equals(nameExpr.getNameAsString()); // 名前式がSystemの場合
+                    }
+                }
+            }
+        }
+        return false;
+    }
+
+    private static String convertPrintContent(Expression expr) { // なでしこ形式のテキスト生成
+        String converted = ExpressionConverter.convertExpression(expr); // 複雑な式を変換
+        if (converted != null) { // 変換できた場合
+            return converted;
+        }
+        return "(" + ExpressionConverter.convertExpression(expr) + ")";
+    }
+
+    public static class Item { // 行番号と内容をまとめたクラス
         public final int line;
         public final String content;
-        
+
         public Item(int line, String content) {
             this.line = line;
             this.content = content;

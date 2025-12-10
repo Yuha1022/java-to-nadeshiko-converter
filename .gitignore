@@ -1,5 +1,9 @@
-out
-dist
-node_modules
-.vscode-test/
-*.vsix
+# macOS
+.DS_Store
+
+# Java build
+*.class
+
+# Node.js
+node_modules/
+dist/
