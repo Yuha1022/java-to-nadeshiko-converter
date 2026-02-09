@@ -1104,7 +1104,7 @@ public class MethodConverter {
                         
                         if ("nextLine".equals(methodName)) return "文字列読み込み";
                         if ("nextInt".equals(methodName)) return "整数読み込み";
-                        if ("nextDouble".equals(methodName)) return "少数読み込み";
+                        if ("nextDouble".equals(methodName)) return "小数読み込み";
                     }
                 }
             }

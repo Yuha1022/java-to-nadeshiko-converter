@@ -120,7 +120,7 @@ public class FieldConverter {
             case "Double":
             case "float":
             case "Float":
-                return "少数";
+                return "小数";
             case "boolean":
             case "Boolean":
                 return "真偽値";

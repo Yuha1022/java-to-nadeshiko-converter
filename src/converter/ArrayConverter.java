@@ -188,7 +188,7 @@ public class ArrayConverter { //配列をなでしこ形式に変換するクラ
             case "Double":
             case "float":
             case "Float":
-                return "少数";
+                return "小数";
             case "boolean":
             case "Boolean":
                 return "真偽値";
