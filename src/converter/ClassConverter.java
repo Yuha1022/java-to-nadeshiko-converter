@@ -6,6 +6,7 @@ import java.util.List;
 import com.github.javaparser.ast.CompilationUnit;
 import com.github.javaparser.ast.body.ClassOrInterfaceDeclaration;
 import com.github.javaparser.ast.body.TypeDeclaration;
+import com.github.javaparser.ast.expr.AnnotationExpr;
 import com.github.javaparser.ast.type.ClassOrInterfaceType;
 
 public class ClassConverter {
@@ -31,6 +32,17 @@ public class ClassConverter {
         for (TypeDeclaration<?> type : types) {
             if (type.isClassOrInterfaceDeclaration()) {
                 ClassOrInterfaceDeclaration cls = type.asClassOrInterfaceDeclaration();
+
+                // アノテーションの処理
+                for (AnnotationExpr annotation : cls.getAnnotations()) {
+                    int annotationLine = annotation.getBegin().map(p -> p.line).orElse(-1);
+                    String annotationName = annotation.getNameAsString();
+                    if ("RestController".equals(annotationName)) {
+                        String indent = IndentManager.getIndentForLine(annotationLine);
+                        // クラス宣言(priority=20)より先に表示するためpriorityを15に設定
+                        out.add(new Item(annotationLine, indent + "Web応答用。", 15));
+                    }
+                }
                 
                 // 親をたどってインデントレベルを計算する
                 int indentLevel = 0;

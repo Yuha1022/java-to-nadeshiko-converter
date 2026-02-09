@@ -7,6 +7,7 @@ import com.github.javaparser.ast.expr.BinaryExpr;
 import com.github.javaparser.ast.expr.BooleanLiteralExpr;
 import com.github.javaparser.ast.expr.CastExpr;
 import com.github.javaparser.ast.expr.CharLiteralExpr;
+import com.github.javaparser.ast.expr.ConditionalExpr;
 import com.github.javaparser.ast.expr.DoubleLiteralExpr;
 import com.github.javaparser.ast.expr.EnclosedExpr;
 import com.github.javaparser.ast.expr.Expression;
@@ -72,7 +73,7 @@ public class ExpressionConverter {
         if (isConditionalExpr) {
             String conditionText = ConditionConverter.convertCondition(expr);
             if (conditionText != null && !conditionText.endsWith("が真")) {
-                return "<" + conditionText + ">";
+                return conditionText;
             }
         }
 
@@ -86,6 +87,15 @@ public class ExpressionConverter {
                 return "(" + objectName + "が" + typeName + "型で" + patternVar + "に代入できる)";
             }
             return objectName + "が" + typeName + "型";
+        }
+
+        // 三項演算子の処理 (condition ? then : else)
+        if (expr instanceof ConditionalExpr) {
+            ConditionalExpr conditional = (ConditionalExpr) expr;
+            String conditionStr = ConditionConverter.convertCondition(conditional.getCondition());
+            String thenStr = convertExpression(conditional.getThenExpr());
+            String elseStr = convertExpression(conditional.getElseExpr());
+            return "もし(" + conditionStr + ")ならば(" + thenStr + ")違えば(" + elseStr + ")";
         }
 
         // 複合代入演算子の処理
@@ -700,13 +710,23 @@ public class ExpressionConverter {
         } else if (expr instanceof FieldAccessExpr) {
             sb.append("{").append(convertExpression(expr)).append("}");
         } else if (expr instanceof MethodCallExpr) {
-            // Math.maxなどを変換するためにMethodConverterを呼び出す
-            String converted = MethodConverter.convertMethodCallExpression((MethodCallExpr) expr);
+            MethodCallExpr mc = (MethodCallExpr) expr;
+            // まずConditionConverterで変換を試みる (例: isEmpty, contains)
+            String converted = ConditionConverter.convertCondition(mc);
+            // ConditionConverterが変換できなかった場合(null or "が真"で終わる)、MethodConverterで再試行
+            if (converted == null || converted.endsWith("が真")) {
+                converted = MethodConverter.convertMethodCallExpression(mc);
+            }
             if (converted != null) {
                 sb.append("{").append(converted).append("}");
-            } else {
-                sb.append("{").append(expr.toString()).append("}");
             }
+        } else if (expr instanceof EnclosedExpr) {
+            // ( ... ) の中身を再帰的に処理
+            collectConcatenation(((EnclosedExpr) expr).getInner(), sb);
+        } else if (expr instanceof ConditionalExpr) {
+            // 三項演算子を変換
+            String converted = convertExpression(expr);
+            sb.append("{").append(converted).append("}");
         } else {
             // その他の式はそのまま埋め込む
             sb.append("{").append(expr.toString()).append("}");

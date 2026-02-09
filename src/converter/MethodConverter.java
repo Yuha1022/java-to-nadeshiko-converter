@@ -10,12 +10,14 @@ import com.github.javaparser.ast.NodeList;
 import com.github.javaparser.ast.body.ConstructorDeclaration;
 import com.github.javaparser.ast.body.MethodDeclaration;
 import com.github.javaparser.ast.body.Parameter;
+import com.github.javaparser.ast.expr.AnnotationExpr;
 import com.github.javaparser.ast.expr.AssignExpr;
 import com.github.javaparser.ast.expr.BinaryExpr;
 import com.github.javaparser.ast.expr.Expression;
 import com.github.javaparser.ast.expr.FieldAccessExpr;
 import com.github.javaparser.ast.expr.MethodCallExpr;
 import com.github.javaparser.ast.expr.ObjectCreationExpr;
+import com.github.javaparser.ast.expr.SingleMemberAnnotationExpr;
 import com.github.javaparser.ast.stmt.BlockStmt;
 import com.github.javaparser.ast.stmt.ExplicitConstructorInvocationStmt;
 import com.github.javaparser.ast.stmt.ExpressionStmt;
@@ -53,6 +55,22 @@ public class MethodConverter {
 
         @Override
         public void visit(MethodDeclaration method, Void arg) {
+            // アノテーションの処理
+            for (AnnotationExpr annotation : method.getAnnotations()) {
+                int annotationLine = annotation.getBegin().map(p -> p.line).orElse(-1);
+                String annotationName = annotation.getNameAsString();
+                String indent = IndentManager.getIndentForLine(annotationLine);
+
+                if ("GetMapping".equals(annotationName)) {
+                    if (annotation.isSingleMemberAnnotationExpr()) {
+                        SingleMemberAnnotationExpr sma = annotation.asSingleMemberAnnotationExpr();
+                        String path = ExpressionConverter.convertExpression(sma.getMemberValue());
+                        // メソッド宣言(priority=10)より先に表示するためpriorityを9に設定
+                        items.add(new Item(annotationLine, indent + path + "実行時", 9));
+                    }
+                }
+            }
+
             int line = method.getBegin().map(p -> p.line).orElse(-1);
             String outerIndent = IndentManager.getIndentForLine(line);
             String methodName = method.getNameAsString();
@@ -121,13 +139,13 @@ public class MethodConverter {
 
             String invocation;
             if (stmt.isThis()) {
-                // this(msg) -> 自身のコンストラクタ(msg)。
-                String thisCall = "自身のコンストラクタ";
-                invocation = args.isEmpty() ? thisCall + "。" : thisCall + "(" + args + ")。";
+                // this(msg) -> 自身(msg)生成。
+                String thisCall = "自身";
+                invocation = args.isEmpty() ? thisCall + "生成。" : thisCall + "(" + args + ")生成。";
             } else { // super()
-                // super(msg) -> 親のコンストラクタ(msg)。
-                String superCall = "親のコンストラクタ";
-                invocation = args.isEmpty() ? superCall + "。" : superCall + "(" + args + ")。";
+                // super(msg) -> 親(msg)生成。
+                String superCall = "親";
+                invocation = args.isEmpty() ? superCall + "生成。" : superCall + "(" + args + ")生成。";
             }
 
             items.add(new Item(line, outerIndent + invocation, 30));
@@ -372,8 +390,13 @@ public class MethodConverter {
             // executeUpdate
             if ("executeUpdate".equals(methodName) &&
                     methodCall.getScope().isPresent() &&
-                    methodCall.getScope().get() instanceof MethodCallExpr) {
-                return "connを使用して sql を実行。";
+                    methodCall.getScope().get().isMethodCallExpr()) {
+                MethodCallExpr createStatementCall = methodCall.getScope().get().asMethodCallExpr();
+                if ("createStatement".equals(createStatementCall.getNameAsString()) && createStatementCall.getScope().isPresent()) {
+                    String connVar = createStatementCall.getScope().get().toString();
+                    String sqlVar = methodCall.getArgument(0).toString();
+                    return connVar + "を使用して " + sqlVar + " を実行。";
+                }
             }
 
             // Arrays.sort(array)
@@ -516,6 +539,17 @@ public class MethodConverter {
                 return scopeVar + "に" + arg + "追加。";
             }
 
+            // clear() -> 要素を消去
+            if ("clear".equals(methodName) && methodCall.getArguments().isEmpty()) {
+                return scopeVar + "の要素を消去";
+            }
+
+            // add(index, element) -> index番目にelementを挿入
+            if ("add".equals(methodName) && methodCall.getArguments().size() == 2) {
+                String index = convertArgument(methodCall.getArgument(0));
+                String element = convertArgument(methodCall.getArgument(1));
+                return scopeVar + "の" + index + "番目に" + element + "を追加。";
+            }
 
             return null;
         }
@@ -693,6 +727,11 @@ public class MethodConverter {
             return "「" + expr.asStringLiteralExpr().getValue() + "」";
         } else if (expr.isIntegerLiteralExpr()) {
             return expr.toString();
+        } else if (expr.isObjectCreationExpr()) {
+            // new Hero("アリス") を Hero(「アリス」) のように変換する
+            String converted = ExpressionConverter.convertObjectCreation(expr.asObjectCreationExpr());
+            // 末尾の「生成」を削除
+            return converted.endsWith("生成") ? converted.substring(0, converted.length() - 2) : converted;
         } else if (expr.isCharLiteralExpr()) {
             return "「" + expr.asCharLiteralExpr().getValue() + "」";
         }
@@ -734,19 +773,25 @@ public class MethodConverter {
             }
         }
 
+        // e.getMessage() -> e のエラーメッセージ
+        if ("getMessage".equals(methodName) && mc.getArguments().isEmpty() && mc.getScope().isPresent()) {
+            String scope = convertExpressionToString(mc.getScope().get());
+            return scope + " のエラーメッセージ";
+        }
+
         // DriverManager.getConnection(dburl) -> DriverManager から dburl で接続取得
         if ("getConnection".equals(methodName) && mc.getArguments().size() == 1) {
             if (mc.getScope().isPresent() && "DriverManager".equals(mc.getScope().get().toString())) {
                 String scope = mc.getScope().get().toString();
                 String arg = convertExpressionToString(mc.getArgument(0));
-                return scope + " から " + arg + " で接続取得";
+                return arg + " と接続開始";
             }
         }
 
         // u.openStream() -> u からの通り道
         if ("openStream".equals(methodName) && mc.getArguments().isEmpty() && mc.getScope().isPresent()) {
-            String scope = convertExpressionToString(mc.getScope().get());
-            return scope + " からの通り道";
+            String scope = convertExpressionToString(mc.getScope().get()); // u
+            return scope + "と接続開始";
         }
 
         // res.getWriter() -> res の 書き込み設定
@@ -962,7 +1007,7 @@ public class MethodConverter {
         // names.iterator() -> namesのイテレータ
         if ("iterator".equals(methodName) && mc.getArguments().isEmpty() && mc.getScope().isPresent()) {
             String scope = convertExpressionToString(mc.getScope().get());
-            return scope + "のイテレータ";
+            return scope + " の順番生成";
         }
 
         // it.next() -> itの次の要素
@@ -1084,9 +1129,11 @@ public class MethodConverter {
         }
 
         // e.printStackTrace() -> エラー詳細出力
-        if ("printStackTrace".equals(methodName) && mc.getArguments().isEmpty()) {
-            // スコープ(e)は出力に含めない
-            return "エラー詳細出力";
+        if ("printStackTrace".equals(methodName) && mc.getArguments().isEmpty() && mc.getScope().isPresent()) {
+            String scope = convertExpressionToString(mc.getScope().get());
+            // スコープ(e)を出力に含めるように変更
+            // eのエラー詳細出力
+            return scope + "のエラー詳細出力";
         }
 
         // fr.read() -> frから1文字読込
@@ -1198,18 +1245,10 @@ public class MethodConverter {
 
         // indexOf / lastIndexOf
         if (("indexOf".equals(methodName) || "lastIndexOf".equals(methodName)) && mc.getArguments().size() == 1) {
-            String scope = mc.getScope()
-                    .map(MethodConverter::convertExpressionToString)
-                    .orElse("");
+            String scope = mc.getScope().map(MethodConverter::convertExpressionToString).orElse("");
             String arg = convertExpressionToString(mc.getArgument(0));
-            String positionType = "indexOf".equals(methodName) ? "最初" : "最後";
-
-            // 引数が文字列リテラルの場合、二重引用符を削除して「」で囲む
-            if (mc.getArgument(0).isStringLiteralExpr()) {
-                arg = "「" + mc.getArgument(0).asStringLiteralExpr().getValue() + "」";
-            }
-
-            return scope + "で" + arg + "が" + positionType + "に出る位置";
+            // tasks.indexOf("...") -> tasksの「...」の場所
+            return scope + "の" + arg + "の場所";
         }
 
         // charAt(index)

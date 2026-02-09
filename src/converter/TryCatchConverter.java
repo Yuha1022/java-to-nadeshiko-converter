@@ -5,6 +5,7 @@ import java.util.List;
 
 import com.github.javaparser.ast.CompilationUnit;
 import com.github.javaparser.ast.expr.Expression;
+import com.github.javaparser.ast.body.Parameter;
 import com.github.javaparser.ast.stmt.BlockStmt;
 import com.github.javaparser.ast.stmt.CatchClause;
 import com.github.javaparser.ast.stmt.TryStmt;
@@ -39,8 +40,10 @@ public class TryCatchConverter {
                 // catch 節
                 for (CatchClause cc : tryStmt.getCatchClauses()) {
                     int catchLine = cc.getBegin().map(p -> p.line).orElse(-1);
-                    String catchText = outerIndent + "エラーならば";
-                    items.add(new Item(catchLine, catchText));
+                    Parameter param = cc.getParameter();
+                    String exceptionType = param.getType().asString();
+                    String exceptionVar = param.getNameAsString();
+                    items.add(new Item(catchLine, outerIndent + convertCatchClause(exceptionType, exceptionVar)));
                 }
 
                 // finally 節（ここがポイント）
@@ -60,6 +63,24 @@ public class TryCatchConverter {
         }, null);
 
         return items;
+    }
+
+    private static String convertCatchClause(String exceptionType, String varName) {
+        String errorTypeName;
+        switch (exceptionType) {
+            case "IOException":
+                errorTypeName = "ファイルエラー";
+                break;
+            case "IllegalArgumentException":
+                errorTypeName = "不正な引数エラー";
+                break;
+            case "Exception":
+                errorTypeName = "基本エラー";
+                break;
+            default:
+                errorTypeName = exceptionType; // 不明なエラーはそのまま表示
+        }
+        return "エラー " + varName + " が " + errorTypeName + " ならば";
     }
 
     /**

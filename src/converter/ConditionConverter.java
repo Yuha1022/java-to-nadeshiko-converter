@@ -84,11 +84,25 @@ public class ConditionConverter { // Javaの条件式を日本語に変換する
                 return scope + "の次の要素がある";
             }
 
+            // prefs.containsKey(key) -> prefsのキーにkeyを含む
+            if ("containsKey".equals(mname) && mc.getArguments().size() == 1) {
+                String scope = mc.getScope().map(e -> convertExpressionToString(e)).orElse("");
+                String arg = convertExpressionToString(mc.getArgument(0));
+                return scope + "のキーに" + arg + "を含む";
+            }
+
+           // prefs.containsValue(value) -> prefsの値にvalueCheckを含む
+            if ("containsValue".equals(mname) && mc.getArguments().size() == 1) {
+                String scope = mc.getScope().map(e -> convertExpressionToString(e)).orElse("");
+                String arg = convertExpressionToString(mc.getArgument(0));
+                return scope + "の値に" + arg + "を含む";
+            }
+
             // contains: "scope に 「arg」が含まれている"
             if ("contains".equals(mname) && mc.getArguments().size() == 1) {
-                String scope = mc.getScope().map(e -> convertExpressionToString(e)).orElse(mc.getScope().map(Object::toString).orElse(""));
+                String scope = mc.getScope().map(e -> convertExpressionToString(e)).orElse("");
                 String arg = convertExpressionToString(mc.getArgument(0));
-                return scope + "に" + arg + "が含まれている";
+                return scope + "が" + arg + "を含む";
             }
 
             // endsWith: "scope が 「arg」で終わる"
@@ -100,8 +114,8 @@ public class ConditionConverter { // Javaの条件式を日本語に変換する
 
             // isEmpty(): "scope の長さが0"
             if ("isEmpty".equals(mname) && mc.getArguments().isEmpty()) {
-                String scope = mc.getScope().map(e -> convertExpressionToString(e)).orElse(mc.getScope().map(Object::toString).orElse(""));
-                return scope + "の長さが0";
+                String scope = mc.getScope().map(e -> convertExpressionToString(e)).orElse("");
+                return scope + "が空";
             }
 
             // 他のメソッド呼び出しは "〜が真" として扱う
